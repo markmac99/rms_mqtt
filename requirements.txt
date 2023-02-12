@@ -1,0 +1,2 @@
+# python requirements file
+paho-mqtt
