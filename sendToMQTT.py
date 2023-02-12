@@ -41,7 +41,7 @@ def getLocalCfg(cfgfile=None):
         here = os.path.split(os.path.abspath(__file__))[0]
         cfgfile = os.path.join(here, 'config.ini')
 
-    print(cfgfile)
+    #print(cfgfile)
     localcfg = configparser.ConfigParser()
     localcfg.read(cfgfile)
     return localcfg
