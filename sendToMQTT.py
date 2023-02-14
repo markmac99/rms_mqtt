@@ -94,6 +94,8 @@ def sendToMqtt(cfgfile=None):
     client = mqtt.Client(camname)
     client.on_connect = on_connect
     client.on_publish = on_publish
+    if localcfg['mqtt']['username'] is not '':
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, 1883, 60)
 
     subtopics = ['detectioncount','meteorcount','timestamp']
@@ -111,6 +113,8 @@ def sendOtherData(cputemp, diskspace, cfgfile=None):
     client = mqtt.Client(hname)
     client.on_connect = on_connect
     client.on_publish = on_publish
+    if localcfg['mqtt']['username'] is not '':
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, 1883, 60)
     if len(cputemp) > 2:
         cputemp = cputemp[:-2]
@@ -134,6 +138,8 @@ def test_mqtt(cfgfile=None):
     client = mqtt.Client(hname)
     client.on_connect = on_connect
     client.on_publish = on_publish
+    if localcfg['mqtt']['username'] is not '':
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, 1883, 60)
     ret = client.publish(topic, payload=f'test from {hname}', qos=0, retain=False)
     print("send to {}, result {}".format(topic, ret))
