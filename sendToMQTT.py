@@ -94,9 +94,14 @@ def sendToMqtt(cfgfile=None):
     client = mqtt.Client(camname)
     client.on_connect = on_connect
     client.on_publish = on_publish
-    if localcfg['mqtt']['username'] is not '':
+    mqport = 1883 # default port
+    if localcfg['mqtt']['mqport'] != '':
+        mqport = int(localcfg['mqtt']['mqport'])
+    if localcfg['mqtt']['cafile'] != '':
+        client.tls_set(localcfg['mqtt']['cafile'])
+    if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    client.connect(broker, 1883, 60)
+    client.connect(broker, mqport, 60)
 
     subtopics = ['detectioncount','meteorcount','timestamp']
     for subtopic, msg in zip(subtopics, msgs): 
@@ -113,7 +118,7 @@ def sendOtherData(cputemp, diskspace, cfgfile=None):
     client = mqtt.Client(hname)
     client.on_connect = on_connect
     client.on_publish = on_publish
-    if localcfg['mqtt']['username'] is not '':
+    if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, 1883, 60)
     if len(cputemp) > 2:
@@ -130,7 +135,7 @@ def sendOtherData(cputemp, diskspace, cfgfile=None):
     ret = client.publish(topic, payload=diskspace, qos=0, retain=False)
 
 
-def test_mqtt(cfgfile=None):
+def test_mqtt(cfgfile=None, extratext=''):
     localcfg = getLocalCfg(cfgfile)
     broker = localcfg['mqtt']['broker']
     hname = platform.uname().node
@@ -138,10 +143,15 @@ def test_mqtt(cfgfile=None):
     client = mqtt.Client(hname)
     client.on_connect = on_connect
     client.on_publish = on_publish
-    if localcfg['mqtt']['username'] is not '':
+    mqport = 1883 # default port
+    if localcfg['mqtt']['mqport'] != '':
+        mqport = int(localcfg['mqtt']['mqport'])
+    if localcfg['mqtt']['cafile'] != '':
+        client.tls_set(localcfg['mqtt']['cafile'])
+    if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    client.connect(broker, 1883, 60)
-    ret = client.publish(topic, payload=f'test from {hname}', qos=0, retain=False)
+    client.connect(broker, mqport, 60)
+    ret = client.publish(topic, payload=f'test from {hname} {extratext}', qos=0, retain=False)
     print("send to {}, result {}".format(topic, ret))
 
 
@@ -149,4 +159,4 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         sendToMqtt()
     else:
-        test_mqtt()
+        test_mqtt(extratext=sys.argv[1])
