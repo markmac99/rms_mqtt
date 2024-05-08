@@ -94,9 +94,14 @@ def sendToMqtt(cfgfile=None):
     client = mqtt.Client(camname)
     client.on_connect = on_connect
     client.on_publish = on_publish
+    mqport = 1883 # default port
+    if localcfg['mqtt']['mqport'] is not '':
+        mqport = int(localcfg['mqtt']['mqport'])
+    if localcfg['mqtt']['cafile'] is not '':
+        client.tls_set(localcfg['mqtt']['cafile'])
     if localcfg['mqtt']['username'] is not '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    client.connect(broker, 1883, 60)
+    client.connect(broker, mqport, 60)
 
     subtopics = ['detectioncount','meteorcount','timestamp']
     for subtopic, msg in zip(subtopics, msgs): 
@@ -138,9 +143,14 @@ def test_mqtt(cfgfile=None):
     client = mqtt.Client(hname)
     client.on_connect = on_connect
     client.on_publish = on_publish
+    mqport = 1883 # default port
+    if localcfg['mqtt']['mqport'] is not '':
+        mqport = int(localcfg['mqtt']['mqport'])
+    if localcfg['mqtt']['cafile'] is not '':
+        client.tls_set(localcfg['mqtt']['cafile'])
     if localcfg['mqtt']['username'] is not '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    client.connect(broker, 1883, 60)
+    client.connect(broker, mqport, 60)
     ret = client.publish(topic, payload=f'test from {hname}', qos=0, retain=False)
     print("send to {}, result {}".format(topic, ret))
 
