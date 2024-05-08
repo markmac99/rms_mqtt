@@ -159,4 +159,4 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         sendToMqtt()
     else:
-        test_mqtt(sys.argv[1])
+        test_mqtt(extratext=sys.argv[1])
