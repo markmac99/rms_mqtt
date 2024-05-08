@@ -135,7 +135,7 @@ def sendOtherData(cputemp, diskspace, cfgfile=None):
     ret = client.publish(topic, payload=diskspace, qos=0, retain=False)
 
 
-def test_mqtt(cfgfile=None):
+def test_mqtt(cfgfile=None, extratext=''):
     localcfg = getLocalCfg(cfgfile)
     broker = localcfg['mqtt']['broker']
     hname = platform.uname().node
@@ -151,7 +151,7 @@ def test_mqtt(cfgfile=None):
     if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, mqport, 60)
-    ret = client.publish(topic, payload=f'test from {hname}', qos=0, retain=False)
+    ret = client.publish(topic, payload=f'test from {hname} {extratext}', qos=0, retain=False)
     print("send to {}, result {}".format(topic, ret))
 
 
@@ -159,4 +159,4 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         sendToMqtt()
     else:
-        test_mqtt()
+        test_mqtt(sys.argv[1])
