@@ -95,11 +95,11 @@ def sendToMqtt(cfgfile=None):
     client.on_connect = on_connect
     client.on_publish = on_publish
     mqport = 1883 # default port
-    if localcfg['mqtt']['mqport'] is not '':
+    if localcfg['mqtt']['mqport'] != '':
         mqport = int(localcfg['mqtt']['mqport'])
-    if localcfg['mqtt']['cafile'] is not '':
+    if localcfg['mqtt']['cafile'] != '':
         client.tls_set(localcfg['mqtt']['cafile'])
-    if localcfg['mqtt']['username'] is not '':
+    if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, mqport, 60)
 
@@ -144,11 +144,11 @@ def test_mqtt(cfgfile=None):
     client.on_connect = on_connect
     client.on_publish = on_publish
     mqport = 1883 # default port
-    if localcfg['mqtt']['mqport'] is not '':
+    if localcfg['mqtt']['mqport'] != '':
         mqport = int(localcfg['mqtt']['mqport'])
-    if localcfg['mqtt']['cafile'] is not '':
+    if localcfg['mqtt']['cafile'] != '':
         client.tls_set(localcfg['mqtt']['cafile'])
-    if localcfg['mqtt']['username'] is not '':
+    if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, mqport, 60)
     ret = client.publish(topic, payload=f'test from {hname}', qos=0, retain=False)
