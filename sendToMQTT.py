@@ -118,7 +118,7 @@ def sendOtherData(cputemp, diskspace, cfgfile=None):
     client = mqtt.Client(hname)
     client.on_connect = on_connect
     client.on_publish = on_publish
-    if localcfg['mqtt']['username'] is not '':
+    if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, 1883, 60)
     if len(cputemp) > 2:
