@@ -118,9 +118,13 @@ def sendOtherData(cputemp, diskspace, cfgfile=None):
     client = mqtt.Client(hname)
     client.on_connect = on_connect
     client.on_publish = on_publish
+    if localcfg['mqtt']['mqport'] != '':
+        mqport = int(localcfg['mqtt']['mqport'])
+    if localcfg['mqtt']['cafile'] != '':
+        client.tls_set(localcfg['mqtt']['cafile'])
     if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    client.connect(broker, 1883, 60)
+    client.connect(broker, mqport, 60)
     if len(cputemp) > 2:
         cputemp = cputemp[:-2]
     else:
