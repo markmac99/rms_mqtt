@@ -2,15 +2,7 @@
 # Python script to publish meteor data to MQTT
 # Copyright (C) Mark McIntyre
 #
-#
-# first run "pip install paho-mqtt"
-# then run "python sendToMQTT.py"
-# it will create topics:
-#   meteorcams/youcamid/detectedcount
-#   meteorcams/youcamid/meteorcount
-#   meteorcams/youcamid/datestamp
-# Which are respectively, the total reported in the log file, the total in the FTPdetect file, 
-# and the time the script ran at
+# read the README for information about how to install and use
 
 import paho.mqtt.client as mqtt
 import datetime
@@ -37,35 +29,21 @@ def getRMSConfig(statid, localcfg):
 # The callback function. It will be triggered when trying to connect to the MQTT broker
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("Connected success")
+        log.info("Connected success")
     else:
-        print("Connected fail with code", rc)
+        log.warning("Connected fail with code", rc)
 
 
 def on_publish(client, userdata, result):
-    #print('data published - {}'.format(result))
+    log.info(f'data published - {result}')
     return
 
 
-def getMqClient(localcfg=None, clientname='random'):
-    broker = localcfg['mqtt']['broker']
-    mqport = int(localcfg['mqtt']['mqport'])
-    client = mqtt.Client(clientname)
-    client.on_connect = on_connect
-    client.on_publish = on_publish
-    if localcfg['mqtt']['cafile'] != '':
-        client.tls_set(localcfg['mqtt']['cafile'])
-    if localcfg['mqtt']['username'] != '':
-        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    client.connect(broker, mqport, 60)
-    return client
-
-
 def getLoggedInfo(cfg):
-    datestamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
     log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
     logfs = glob.glob(os.path.join(log_dir, 'log*.log*'))
     logfs.sort(key=lambda x: os.path.getmtime(x))
+    datestamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
     if len(logfs) == 0:
         return 0,0,0,datestamp
     dd=[]
@@ -103,8 +81,7 @@ def getLoggedInfo(cfg):
     if len(caps)> 0:
         capdir = caps[-1]
     else:
-        return detectedcount, meteorcount, 0, datestamp
-
+        return 0,0,0,datestamp
     ftpfs = glob.glob(os.path.join(capdir, 'FTPdetectinfo*.txt'))
     ftpf = [f for f in ftpfs if 'backup' not in f and 'unfiltered' not in f]
     meteorcount = 0
@@ -115,7 +92,6 @@ def getLoggedInfo(cfg):
     # if meteorcount is nonzero but detected count is zero then the logfile was malformed
     if detectedcount == 0 and meteorcount > 0:
         detectedcount = meteorcount
-
     return detectedcount, meteorcount, starcount, datestamp
 
 
@@ -129,13 +105,19 @@ def sendMatchdataToMqtt(statid=''):
     else:
         statids = [statid]
     ret = 0
-    client = getMqClient(localcfg)
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
 
+        broker = localcfg['mqtt']['broker']
+        mqport = int(localcfg['mqtt']['mqport'])
         topicbase = 'meteorcams' 
-        if 'test' not in statid:
-            statid = cfg.stationID.lower()
+        if 'test' in statid:
+            camname = statid
+        else:
+            camname = os.uname()[1]
+            if 'test' not in camname:
+                camname = cfg.stationID.lower()
+
         apiurl = 'https://api.ukmeteors.co.uk/matches'
         dtstr = datetime.datetime.now().strftime('%Y%m%d')
         apicall = f'{apiurl}?reqtyp=station&reqval={dtstr}&statid={cfg.stationID}'
@@ -153,11 +135,15 @@ def sendMatchdataToMqtt(statid=''):
             v1 = rawdata.count(f'{dtstr}_1')
             v2 = rawdata.count(f'{dtstr}_2')
             matchcount = matchcount + v1 + v2
+        client = mqtt.Client(camname)
+        client.on_connect = on_connect
+        client.on_publish = on_publish
         if localcfg['mqtt']['username'] != '':
             client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-        topic = f'{topicbase}/{statid}/matchcount'
+        client.connect(broker, mqport, 60)
+        topic = f'{topicbase}/{camname}/matchcount'
         ret = client.publish(topic, payload=matchcount, qos=0, retain=False)
-        log.info(f'there were {matchcount} matches last night for {statid}')
+        log.info(f'there were {matchcount} matches last night for {camname}')
     return ret
 
 
@@ -170,13 +156,25 @@ def sendLiveMeteorCount(statid=''):
     else:
         statids = [statid]
 
-    client = getMqClient(localcfg)
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
 
+        broker = localcfg['mqtt']['broker']
+        mqport = int(localcfg['mqtt']['mqport'])
         topicbase = 'meteorcams' 
-        if 'test' not in statid:
-            statid = cfg.stationID.lower()
+        if 'test' in statid:
+            camname = statid
+        else:
+            camname = os.uname()[1]
+            if 'test' not in camname:
+                camname = cfg.stationID.lower()
+
+        client = mqtt.Client(camname)
+        client.on_connect = on_connect
+        client.on_publish = on_publish
+        if localcfg['mqtt']['username'] != '':
+            client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+        client.connect(broker, mqport, 60)
 
         log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
         logfs = glob.glob(os.path.join(log_dir, 'ukmonlive*.log*'))
@@ -188,9 +186,9 @@ def sendLiveMeteorCount(statid=''):
             msg = len([x for x in lis if 'uploading FF' in x])
 
         subtopic = 'livecmeteorount'
-        topic = f'{topicbase}/{statid}/{subtopic}'
-        _ = client.publish(topic, payload=msg, qos=0, retain=False)
-    client.disconnect()
+        topic = f'{topicbase}/{camname}/{subtopic}'
+        ret = client.publish(topic, payload=msg, qos=0, retain=False)
+        log.info(f'sent {msg} to {topic} and got {ret}')
     return 
 
 
@@ -203,27 +201,35 @@ def sendToMqtt(statid=''):
     else:
         statids = [statid]
 
-    client = getMqClient(localcfg)
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
+
+        broker = localcfg['mqtt']['broker']
+        mqport = int(localcfg['mqtt']['mqport'])
         topicbase = 'meteorcams' 
-        if 'test' not in statid:
-            statid = cfg.stationID.lower()
-        print(f'processing {statid}')
-        detectioncount, metcount, _, datestamp = getLoggedInfo(cfg)
         if 'test' in statid:
-            metcount = -1
-            detectioncount = -2
+            camname = statid
+        else:
+            camname = os.uname()[1]
+            if 'test' not in camname:
+                camname = cfg.stationID.lower()
+
+        detectioncount, metcount, _, datestamp = getLoggedInfo(cfg)
         msgs =[detectioncount, metcount, datestamp]
 
-        subtopics = ['detectioncount','meteorcount','timestamp']
-        broker = localcfg['mqtt']['broker']
-        for subtopic, msg in zip(subtopics, msgs): 
-            topic = f'{topicbase}/{statid}/{subtopic}'
-            ret = client.publish(topic, payload=msg, qos=2, retain=True)
-            print(f'send {msg} to {topic} on {broker}, result {ret}')
+        client = mqtt.Client(camname)
+        client.on_connect = on_connect
+        client.on_publish = on_publish
+        if localcfg['mqtt']['username'] != '':
+            client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+        client.connect(broker, mqport, 60)
 
-    client.disconnect()
+        subtopics = ['detectioncount','meteorcount','timestamp']
+        for subtopic, msg in zip(subtopics, msgs): 
+            topic = f'{topicbase}/{camname}/{subtopic}'
+            ret = client.publish(topic, payload=msg, qos=0, retain=False)
+            log.info(f'sent {msg} to {topic} and got {ret}')
+
     return ret
 
 
@@ -236,12 +242,18 @@ def sendStarCountToMqtt(statid=''):
     else:
         statids = [statid]
     ret = 0
-    client = getMqClient(localcfg)
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
+        broker = localcfg['mqtt']['broker']
+        mqport = int(localcfg['mqtt']['mqport'])
         topicbase = 'meteorcams' 
-        if 'test' not in statid:
-            statid = cfg.stationID.lower()
+
+        if 'test' in statid:
+            camname = statid
+        else:
+            camname = os.uname()[1]
+            if 'test' not in camname:
+                camname = cfg.stationID.lower()
 
         log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
         logfs = glob.glob(os.path.join(log_dir, 'log*.log*'))
@@ -250,7 +262,7 @@ def sendStarCountToMqtt(statid=''):
         tstamp = None
         if len(logfs) > 0:
             current_log = logfs[-1]
-            print(f'current log is {current_log}')
+            log.info(f'current log is {current_log}')
             lis = open(current_log,'r').readlines()
             sc = [li for li in lis if 'Detected stars' in li]
             if len(sc) > 0:
@@ -261,7 +273,7 @@ def sendStarCountToMqtt(statid=''):
                     pass
             else:
                 current_log = logfs[-2]
-                print(f'current log is {current_log}')
+                log.info(f'current log is {current_log}')
                 lis = open(current_log,'r').readlines()
                 sc = [li for li in lis if 'Detected stars' in li]
                 if len(sc) > 0:
@@ -272,10 +284,17 @@ def sendStarCountToMqtt(statid=''):
                         pass
 
             if tstamp is not None: 
-                topic = f'{topicbase}/{statid}/starcount'
-                print(f'{tstamp}: starcount for {statid} is {starcount}')
+                client = mqtt.Client(camname)
+                client.on_connect = on_connect
+                client.on_publish = on_publish
+                if localcfg['mqtt']['username'] != '':
+                    client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+                client.connect(broker, mqport, 60)
+
+                topic = f'{topicbase}/{camname}/starcount'
                 ret = client.publish(topic, payload=starcount, qos=0, retain=False)
-    client.disconnect()
+                log.info(f'sent {starcount} to {topic} and got {ret}')
+
     return ret
 
 
@@ -285,12 +304,22 @@ def sendOtherData(cputemp, diskspace, statid=''):
     localcfg.read(os.path.join(srcdir, 'config.ini'))
     
     cfg = getRMSConfig(statid, localcfg)
-    if statid == '':
-        statid = os.uname()[1]
-    if 'test' not in statid:
-        statid = cfg.stationID.lower()
+    broker = localcfg['mqtt']['broker']
+    mqport = int(localcfg['mqtt']['mqport'])
 
-    client = getMqClient(localcfg)
+    if 'test' in statid:
+        camname = statid
+    else:
+        camname = os.uname()[1]
+        if 'test' not in camname:
+            camname = cfg.stationID.lower()
+
+    client = mqtt.Client(camname)
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+    if localcfg['mqtt']['username'] != '':
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+    client.connect(broker, mqport, 60)
     if len(cputemp) > 2:
         cputemp = cputemp[:-2]
     else:
@@ -299,11 +328,10 @@ def sendOtherData(cputemp, diskspace, statid=''):
         diskspace = diskspace[:-1]
     else:
         diskspace = 0
-    topic = f'meteorcams/{statid}/cputemp'
-    ret = client.publish(topic, payload=cputemp, qos=0, retain=True)
-    topic = f'meteorcams/{statid}/diskspace'
-    ret = client.publish(topic, payload=diskspace, qos=0, retain=True)
-    client.disconnect()
+    topic = f'meteorcams/{camname}/cputemp'
+    ret = client.publish(topic, payload=cputemp, qos=0, retain=False)
+    topic = f'meteorcams/{camname}/diskspace'
+    ret = client.publish(topic, payload=diskspace, qos=0, retain=False)
     return ret
 
 
@@ -312,15 +340,22 @@ def test_mqtt(statid=''):
     localcfg = configparser.ConfigParser()
     localcfg.read(os.path.join(srcdir, 'config.ini'))
     cfg = getRMSConfig(statid, localcfg)
-    client = getMqClient(localcfg)
-    if statid == '':
-        statid = os.uname()[1]
-    if 'test' not in statid:
-        statid = cfg.stationID.lower()
+    broker = localcfg['mqtt']['broker']
+    camname = os.uname()[1]
+    if 'test' not in camname:
+        camname = cfg.stationID.lower()
 
-    topic = f'testing/{statid}/test'
-    ret = client.publish(topic, payload=f'test from {statid}', qos=0, retain=False)
-    print("send to {}, result {}".format(topic, ret))
+    client = mqtt.Client(camname)
+    topic = f'testing/{camname}/test'
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+    if localcfg['mqtt']['username'] != '':
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+    if localcfg['mqtt']['username'] != '':
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+    client.connect(broker, 1883, 60)
+    ret = client.publish(topic, payload=f'test from {camname}', qos=0, retain=False)
+    log.info(f"send to {topic}, result {ret}")
 
 
 if __name__ == '__main__':
