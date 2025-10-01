@@ -299,7 +299,7 @@ def sendStarCountToMqtt(statid=''):
     return ret
 
 
-def sendOtherData(statid=''):
+def sendOtherData(cputemp=None, statid=''):
     srcdir = os.path.split(os.path.abspath(__file__))[0]
     localcfg = configparser.ConfigParser()
     localcfg.read(os.path.join(srcdir, 'config.ini'))
@@ -318,11 +318,12 @@ def sendOtherData(statid=''):
         if 'test' not in camname:
             camname = cfg.stationID.lower()
 
-    if sys.platform != 'win32':
-        cputemp = float(open('/sys/class/thermal/thermal_zone0/temp', 'r').readline().strip())/1000
-    else:
-        print('cputemp not supported on windows')
-        cputemp=0
+    if cputemp is None:
+        if sys.platform != 'win32':
+            cputemp = float(open('/sys/class/thermal/thermal_zone0/temp', 'r').readline().strip())/1000
+        else:
+            print('cputemp not supported on windows')
+            cputemp=0
 
     client = mqtt.Client(camname)
     client.on_connect = on_connect
