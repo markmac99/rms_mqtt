@@ -47,8 +47,9 @@ There are four functions that can be used to submit meteor-related data to MQ:
 * `sendLiveMeteorCount` will publish a live count of potential detections.  
 * `sendMatchdataToMqtt` if you're a UKMON member then this will publish the count of confirmed matches your station was involved in. 
 
-### Tracking Star and Live Detection Counts
-To track the star count and live meteor counts at ten minute intervals, add an entry to the crontab like the one below  
+### Tracking Star and Live Detection Counts and Pi Statistics
+To track the star count and live meteor counts at ten minute intervals, add an entry to the crontab like the one below. This will also track diskspace and CPU temperature. 
+
 ```bash
 */10 * * * * /home/rms/source/tackley-tools/logLiveStats.sh >> /dev/null 2>&1
 ```
@@ -74,7 +75,7 @@ python -c "from sendToMQTT import sendToMqtt;sendToMqtt(statid='UK1234')"
 `sendOtherData` can be used to publish CPU temperature and free diskspace on the disk holding `RMS_data`. 
 
 The function currently doesn't support Windows, because CPU temp is not easy to obtain on Windows without 
-administrator permissions (why? Ask Microsoft....). Hence for Windows this function will publish a value of zero for CPU temp. If you have the CPU temp from some other source you can feed it into the function as shown below.
+administrator permissions (Ask Microsoft....). Hence for Windows this function will publish a value of zero for CPU temp. If you have the CPU temp from some other source you can feed it into the function as shown below.
 
 Note that the data are published to a topic `meteorcams/{camid}/` where camid is the the first station listed in the config file. 
 
