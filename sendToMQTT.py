@@ -12,6 +12,7 @@ import glob
 import logging
 import requests
 import configparser
+import shutil
 
 import RMS.ConfigReader as cr
 
@@ -298,15 +299,18 @@ def sendStarCountToMqtt(statid=''):
     return ret
 
 
-def sendOtherData(cputemp, diskspace, statid=''):
+def sendOtherData(statid=''):
     srcdir = os.path.split(os.path.abspath(__file__))[0]
     localcfg = configparser.ConfigParser()
     localcfg.read(os.path.join(srcdir, 'config.ini'))
     
     cfg = getRMSConfig(statid, localcfg)
+    
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
 
+    usage = shutil.disk_usage(cfg.data_dir)
+    diskspace = round((usage.used/usage.total)*100, 2)
     if 'test' in statid:
         camname = statid
     else:
@@ -314,20 +318,19 @@ def sendOtherData(cputemp, diskspace, statid=''):
         if 'test' not in camname:
             camname = cfg.stationID.lower()
 
+    if sys.platform != 'win32':
+        cputemp = float(open('/sys/class/thermal/thermal_zone0/temp', 'r').readline().strip())/1000
+    else:
+        print('cputemp not supported on windows')
+        cputemp=0
+
     client = mqtt.Client(camname)
     client.on_connect = on_connect
     client.on_publish = on_publish
     if localcfg['mqtt']['username'] != '':
         client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
     client.connect(broker, mqport, 60)
-    if len(cputemp) > 2:
-        cputemp = cputemp[:-2]
-    else:
-        cputemp = 0
-    if len(diskspace) > 1:
-        diskspace = diskspace[:-1]
-    else:
-        diskspace = 0
+
     topic = f'meteorcams/{camname}/cputemp'
     ret = client.publish(topic, payload=cputemp, qos=0, retain=False)
     topic = f'meteorcams/{camname}/diskspace'
