@@ -304,13 +304,18 @@ def sendOtherData(cputemp=None, statid=''):
     localcfg = configparser.ConfigParser()
     localcfg.read(os.path.join(srcdir, 'config.ini'))
     
-    cfg = getRMSConfig(statid, localcfg)
-    
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
 
+    # use the 1st station id if nothing provided on the commandline
+    if statid == '':
+        statids = [x[1].upper() for x in localcfg.items('stations')]
+        statid = statids[0]
+    cfg = getRMSConfig(statid, localcfg)
+    
     usage = shutil.disk_usage(cfg.data_dir)
     diskspace = round((usage.used/usage.total)*100, 2)
+
     if 'test' in statid:
         camname = statid
     else:
