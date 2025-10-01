@@ -47,10 +47,21 @@ There are four functions that can be used to submit meteor-related data to MQ:
 * `sendLiveMeteorCount` will publish a live count of potential detections.  
 * `sendMatchdataToMqtt` if you're a UKMON member then this will publish the count of confirmed matches your station was involved in. 
 
-### Example use from the commandline
-All functions can be invoked in a similar way to the examples below. 
+### Tracking Star and Live Detection Counts
+To track the star count and live meteor counts at ten minute intervals, add an entry to the crontab like the one below  
+```bash
+*/10 * * * * /home/rms/source/tackley-tools/logLiveStats.sh >> /dev/null 2>&1
+```
 
-This invocation will read the station list from the config file and send data them all.
+### Tracking Meteor Counts
+This should be done in the morning immediately after data has been uploaded, so its best to invoke it from the RMS post-processing hook but before RMS restarts. A minimal post-processing hook script is available in this repository but its left as an exercise for the reader to work out how to integrate this with RMS and any other post-processing scripts. 
+
+You can also use the bash script `logMeteorStats.sh`, but as noted you need to invoke this as soon as RMS has uploaded so as to capture the current data. 
+
+### Example use from the commandline
+All functions can be invoked from the Terminal / commandline as shown in the examples below. 
+
+This invocation will read the station list from the config file and send data for them all.
 ``` bash
 python -c "from sendToMQTT import sendToMqtt;sendToMqtt()"
 ```
@@ -59,7 +70,7 @@ This version will explicitly try to obtain data for station `UK1234`, if its ava
 python -c "from sendToMQTT import sendToMqtt;sendToMqtt(statid='UK1234')"
 ```
 
-## CPU temperature and diskspace
+### CPU temperature and diskspace
 `sendOtherData` can be used to publish CPU temperature and free diskspace on the disk holding `RMS_data`. 
 
 The function currently doesn't support Windows, because CPU temp is not easy to obtain on Windows without 
