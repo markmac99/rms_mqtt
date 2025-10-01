@@ -1,0 +1,9 @@
+# config file
+[rms]
+RMSDIR=
+
+[mqtt]
+BROKER=
+USERNAME=
+PASSWORD=
+MQPORT=
