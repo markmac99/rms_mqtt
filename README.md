@@ -76,6 +76,8 @@ python -c "from sendToMQTT import sendToMqtt;sendToMqtt(statid='UK1234')"
 The function currently doesn't support Windows, because CPU temp is not easy to obtain on Windows without 
 administrator permissions (why? Ask Microsoft....). Hence for Windows this function will publish a value of zero for CPU temp. If you have the CPU temp from some other source you can feed it into the function as shown below.
 
+Note that the data are published to a topic `meteorcams/{camid}/` where camid is the the first station listed in the config file. 
+
 ``` bash
 # attempt to determine cpu temperature automatically - only works on Windows
 python -c "from sendToMQTT import sendOtherData;sendOtherData()"
