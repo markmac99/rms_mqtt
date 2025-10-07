@@ -330,6 +330,8 @@ def sendOtherData(cputemp=None, statid=''):
             print('cputemp not supported on windows')
             cputemp=0
 
+    memused, memusedpct = getfreemem()
+
     client = mqtt.Client(camname)
     client.on_connect = on_connect
     client.on_publish = on_publish
@@ -341,7 +343,22 @@ def sendOtherData(cputemp=None, statid=''):
     ret = client.publish(topic, payload=cputemp, qos=0, retain=False)
     topic = f'meteorcams/{camname}/diskspace'
     ret = client.publish(topic, payload=diskspace, qos=0, retain=False)
+    topic = f'meteorcams/{camname}/memused'
+    ret = client.publish(topic, payload=memused, qos=0, retain=False)
+    topic = f'meteorcams/{camname}/memusedpct'
+    ret = client.publish(topic, payload=memusedpct, qos=0, retain=False)
     return ret
+
+
+def getfreemem():
+    lis = open('/proc/meminfo', 'r').readlines()
+    total = [x for x in lis if 'MemTotal' in x][0].strip().split(':')
+    avail = [x for x in lis if 'MemAvailable' in x][0].strip().split(':')
+    total = float(total[1].replace('kB',''))
+    avail = float(avail[1].replace('kB',''))
+    memused = total - avail
+    memusedpct = round(memused/total, 2)
+    return memused, memusedpct
 
 
 def test_mqtt(statid=''):
