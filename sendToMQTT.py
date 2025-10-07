@@ -348,9 +348,9 @@ def sendOtherData(cputemp=None, statid=''):
     topic = f'meteorcams/{camname}/memusedpct'
     ret = client.publish(topic, payload=memusedpct, qos=0, retain=False)
     topic = f'meteorcams/{camname}/swapused'
-    ret = client.publish(topic, payload=memused, qos=0, retain=False)
+    ret = client.publish(topic, payload=swapused, qos=0, retain=False)
     topic = f'meteorcams/{camname}/swapusedpct'
-    ret = client.publish(topic, payload=memusedpct, qos=0, retain=False)
+    ret = client.publish(topic, payload=swapusedpct, qos=0, retain=False)
     return ret
 
 
