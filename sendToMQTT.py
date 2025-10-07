@@ -357,7 +357,7 @@ def getfreemem():
     total = float(total[1].replace('kB',''))
     avail = float(avail[1].replace('kB',''))
     memused = total - avail
-    memusedpct = round(memused/total, 2)
+    memusedpct = round(memused * 100 / total, 2)
     return memused, memusedpct
 
 
