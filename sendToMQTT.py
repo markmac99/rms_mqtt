@@ -362,12 +362,12 @@ def getfreemem():
     avail = float(avail[1].replace('kB',''))
     memused = total - avail
     memusedpct = round(memused * 100 / total, 2)
-    total = [x for x in lis if 'SwapTotal' in x][0].strip().split(':')
-    avail = [x for x in lis if 'SwapFree' in x][0].strip().split(':')
-    total = float(total[1].replace('kB',''))
-    avail = float(avail[1].replace('kB',''))
-    swapused = total - avail
-    swapusedpct = round(memused * 100 / total, 2)
+    swtotal = [x for x in lis if 'SwapTotal' in x][0].strip().split(':')
+    swavail = [x for x in lis if 'SwapFree' in x][0].strip().split(':')
+    swtotal = float(swtotal[1].replace('kB',''))
+    swavail = float(swavail[1].replace('kB',''))
+    swapused = swtotal - swavail
+    swapusedpct = round(swapused * 100 / total, 2)
 
     return memused, memusedpct, swapused, swapusedpct
 
