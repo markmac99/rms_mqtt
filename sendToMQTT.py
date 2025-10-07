@@ -330,7 +330,7 @@ def sendOtherData(cputemp=None, statid=''):
             print('cputemp not supported on windows')
             cputemp=0
 
-    memused, memusedpct = getfreemem()
+    memused, memusedpct, swapused, swapusedpct = getfreemem()
 
     client = mqtt.Client(camname)
     client.on_connect = on_connect
@@ -347,6 +347,10 @@ def sendOtherData(cputemp=None, statid=''):
     ret = client.publish(topic, payload=memused, qos=0, retain=False)
     topic = f'meteorcams/{camname}/memusedpct'
     ret = client.publish(topic, payload=memusedpct, qos=0, retain=False)
+    topic = f'meteorcams/{camname}/swapused'
+    ret = client.publish(topic, payload=memused, qos=0, retain=False)
+    topic = f'meteorcams/{camname}/swapusedpct'
+    ret = client.publish(topic, payload=memusedpct, qos=0, retain=False)
     return ret
 
 
@@ -358,7 +362,14 @@ def getfreemem():
     avail = float(avail[1].replace('kB',''))
     memused = total - avail
     memusedpct = round(memused * 100 / total, 2)
-    return memused, memusedpct
+    total = [x for x in lis if 'SwapTotal' in x][0].strip().split(':')
+    avail = [x for x in lis if 'SwapFree' in x][0].strip().split(':')
+    total = float(total[1].replace('kB',''))
+    avail = float(avail[1].replace('kB',''))
+    swapused = total - avail
+    swapusedpct = round(memused * 100 / total, 2)
+
+    return memused, memusedpct, swapused, swapusedpct
 
 
 def test_mqtt(statid=''):
