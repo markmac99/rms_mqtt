@@ -4,7 +4,7 @@
 #
 # read the README for information about how to install and use
 
-import paho.mqtt.client as mqtt
+import paho.mqtt.client as paho
 import datetime
 import os
 import sys
@@ -13,10 +13,36 @@ import logging
 import requests
 import configparser
 import shutil
+import ssl
+from time import sleep
 
 import RMS.ConfigReader as cr
 
 log = logging.getLogger()
+
+
+def getfreemem():
+    if sys.platform != 'win32':
+        lis = open('/proc/meminfo', 'r').readlines()
+        total = [x for x in lis if 'MemTotal' in x][0].strip().split(':')
+        avail = [x for x in lis if 'MemAvailable' in x][0].strip().split(':')
+        total = float(total[1].replace('kB',''))
+        avail = float(avail[1].replace('kB',''))
+        memused = total - avail
+        memusedpct = round(memused * 100 / total, 2)
+        swtotal = [x for x in lis if 'SwapTotal' in x][0].strip().split(':')
+        swavail = [x for x in lis if 'SwapFree' in x][0].strip().split(':')
+        swtotal = float(swtotal[1].replace('kB',''))
+        swavail = float(swavail[1].replace('kB',''))
+        swapused = swtotal - swavail
+        swapusedpct = round(swapused * 100 / total, 2)
+    else:
+        memused = 0
+        memusedpct = 0
+        swapused = 0
+        swapusedpct = 0
+        log.info('mem usage not supported on Windows')
+    return memused, memusedpct, swapused, swapusedpct
 
 
 def getRMSConfig(statid, localcfg):
@@ -136,15 +162,18 @@ def sendMatchdataToMqtt(statid=''):
             v1 = rawdata.count(f'{dtstr}_1')
             v2 = rawdata.count(f'{dtstr}_2')
             matchcount = matchcount + v1 + v2
-        client = mqtt.Client(camname)
+        client = paho.Client(camname)
         client.on_connect = on_connect
         client.on_publish = on_publish
-        if localcfg['mqtt']['username'] != '':
-            client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+        if mqport == 8883:
+            client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
         client.connect(broker, mqport, 60)
         topic = f'{topicbase}/{camname}/matchcount'
+        sleep(1)
         ret = client.publish(topic, payload=matchcount, qos=0, retain=False)
         log.info(f'there were {matchcount} matches last night for {camname}')
+        client.disconnect()
     return ret
 
 
@@ -170,11 +199,12 @@ def sendLiveMeteorCount(statid=''):
             if 'test' not in camname:
                 camname = cfg.stationID.lower()
 
-        client = mqtt.Client(camname)
+        client = paho.Client(camname)
         client.on_connect = on_connect
         client.on_publish = on_publish
-        if localcfg['mqtt']['username'] != '':
-            client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+        if mqport == 8883:
+            client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
         client.connect(broker, mqport, 60)
 
         log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
@@ -188,7 +218,9 @@ def sendLiveMeteorCount(statid=''):
 
         subtopic = 'livecmeteorount'
         topic = f'{topicbase}/{camname}/{subtopic}'
+        sleep(1)
         ret = client.publish(topic, payload=msg, qos=0, retain=False)
+        client.disconnect()
         log.info(f'sent {msg} to {topic} and got {ret}')
     return 
 
@@ -202,12 +234,13 @@ def sendToMqtt(statid=''):
     else:
         statids = [statid]
 
+    broker = localcfg['mqtt']['broker']
+    mqport = int(localcfg['mqtt']['mqport'])
+    username = localcfg['mqtt']['username']
+    password = localcfg['mqtt']['password']
+    topicbase = 'meteorcams' 
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
-
-        broker = localcfg['mqtt']['broker']
-        mqport = int(localcfg['mqtt']['mqport'])
-        topicbase = 'meteorcams' 
         if 'test' in statid:
             camname = statid
         else:
@@ -218,19 +251,19 @@ def sendToMqtt(statid=''):
         detectioncount, metcount, _, datestamp = getLoggedInfo(cfg)
         msgs =[detectioncount, metcount, datestamp]
 
-        client = mqtt.Client(camname)
+        client = paho.Client(camname)
+        client.username_pw_set(username, password)
+        if mqport == 8883:
+            client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
         client.on_connect = on_connect
         client.on_publish = on_publish
-        if localcfg['mqtt']['username'] != '':
-            client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
         client.connect(broker, mqport, 60)
-
         subtopics = ['detectioncount','meteorcount','timestamp']
         for subtopic, msg in zip(subtopics, msgs): 
             topic = f'{topicbase}/{camname}/{subtopic}'
+            sleep(1)
             ret = client.publish(topic, payload=msg, qos=0, retain=False)
-            log.info(f'sent {msg} to {topic} and got {ret}')
-
+        client.disconnect()
     return ret
 
 
@@ -284,18 +317,20 @@ def sendStarCountToMqtt(statid=''):
                     except Exception:
                         pass
 
-            if tstamp is not None: 
-                client = mqtt.Client(camname)
+            if tstamp is not None or 'test' in camname: 
+                client = paho.Client(camname)
                 client.on_connect = on_connect
                 client.on_publish = on_publish
-                if localcfg['mqtt']['username'] != '':
-                    client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+                client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+                if mqport == 8883:
+                    client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
                 client.connect(broker, mqport, 60)
 
                 topic = f'{topicbase}/{camname}/starcount'
+                sleep(1)
                 ret = client.publish(topic, payload=starcount, qos=0, retain=False)
                 log.info(f'sent {starcount} to {topic} and got {ret}')
-
+                client.disconnect()
     return ret
 
 
@@ -332,44 +367,23 @@ def sendOtherData(cputemp=None, statid=''):
 
     memused, memusedpct, swapused, swapusedpct = getfreemem()
 
-    client = mqtt.Client(camname)
+    client = paho.Client(camname)
     client.on_connect = on_connect
     client.on_publish = on_publish
-    if localcfg['mqtt']['username'] != '':
-        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+    client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+    if mqport == 8883:
+        client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
     client.connect(broker, mqport, 60)
+    print(broker, mqport)
+    topics = ['cputemp','diskspace','memused','memusedpct','swapused','swapusedpct']
+    vals = [cputemp, diskspace, memused, memusedpct, swapused, swapusedpct]
 
-    topic = f'meteorcams/{camname}/cputemp'
-    ret = client.publish(topic, payload=cputemp, qos=0, retain=False)
-    topic = f'meteorcams/{camname}/diskspace'
-    ret = client.publish(topic, payload=diskspace, qos=0, retain=False)
-    topic = f'meteorcams/{camname}/memused'
-    ret = client.publish(topic, payload=memused, qos=0, retain=False)
-    topic = f'meteorcams/{camname}/memusedpct'
-    ret = client.publish(topic, payload=memusedpct, qos=0, retain=False)
-    topic = f'meteorcams/{camname}/swapused'
-    ret = client.publish(topic, payload=swapused, qos=0, retain=False)
-    topic = f'meteorcams/{camname}/swapusedpct'
-    ret = client.publish(topic, payload=swapusedpct, qos=0, retain=False)
+    for subtopic, val in zip(topics, vals):
+        topic = f'meteorcams/{camname}/{subtopic}'
+        sleep(1)
+        ret = client.publish(topic, payload=val, qos=0, retain=False)
+    client.disconnect()
     return ret
-
-
-def getfreemem():
-    lis = open('/proc/meminfo', 'r').readlines()
-    total = [x for x in lis if 'MemTotal' in x][0].strip().split(':')
-    avail = [x for x in lis if 'MemAvailable' in x][0].strip().split(':')
-    total = float(total[1].replace('kB',''))
-    avail = float(avail[1].replace('kB',''))
-    memused = total - avail
-    memusedpct = round(memused * 100 / total, 2)
-    swtotal = [x for x in lis if 'SwapTotal' in x][0].strip().split(':')
-    swavail = [x for x in lis if 'SwapFree' in x][0].strip().split(':')
-    swtotal = float(swtotal[1].replace('kB',''))
-    swavail = float(swavail[1].replace('kB',''))
-    swapused = swtotal - swavail
-    swapusedpct = round(swapused * 100 / total, 2)
-
-    return memused, memusedpct, swapused, swapusedpct
 
 
 def test_mqtt(statid=''):
@@ -378,19 +392,23 @@ def test_mqtt(statid=''):
     localcfg.read(os.path.join(srcdir, 'config.ini'))
     cfg = getRMSConfig(statid, localcfg)
     broker = localcfg['mqtt']['broker']
-    camname = os.uname()[1]
-    if 'test' not in camname:
-        camname = cfg.stationID.lower()
+    mqport = int(localcfg['mqtt']['mqport'])
+    if 'test' in statid:
+        camname = statid
+    else:
+        camname = os.uname()[1]
+        if 'test' not in camname:
+            camname = cfg.stationID.lower()
 
-    client = mqtt.Client(camname)
+    client = paho.Client(camname)
     topic = f'testing/{camname}/test'
     client.on_connect = on_connect
     client.on_publish = on_publish
-    if localcfg['mqtt']['username'] != '':
-        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    if localcfg['mqtt']['username'] != '':
-        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    client.connect(broker, 1883, 60)
+    client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
+    if mqport == 8883:
+        client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
+    client.connect(broker, mqport, 60)
+    sleep(1)
     ret = client.publish(topic, payload=f'test from {camname}', qos=0, retain=False)
     log.info(f"send to {topic}, result {ret}")
 
