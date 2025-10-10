@@ -85,7 +85,7 @@ def getLoggedInfo(cfg):
             if len(lst) != 0:
                 lst = lst[-1]
                 nextcapstart = lst.split(': ')[1].strip()
-                print(f' nextcapstart {nextcapstart}')
+                log.info(f' nextcapstart {nextcapstart}')
 
         dd = [li for li in lis if 'Data directory' in li]
         if len(dd) > 0:
