@@ -71,14 +71,22 @@ def getLoggedInfo(cfg):
     logfs = glob.glob(os.path.join(log_dir, 'log*.log*'))
     logfs.sort(key=lambda x: os.path.getmtime(x))
     datestamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
+    nextcapstart = None
     if len(logfs) == 0:
-        return 0,0,0,datestamp
+        return 0,0,0,datestamp, ''
     dd=[]
     i=1
     
     while len(dd) == 0 and i < len(logfs) + 1:
         last_log = logfs[-i]
         lis = open(last_log,'r').readlines()
+        if not nextcapstart:
+            lst = [li for li in lis if 'Next start time:' in li]
+            if len(lst) != 0:
+                lst = lst[-1]
+                nextcapstart = lst.split(': ')[1].strip()
+                print(f' nextcapstart {nextcapstart}')
+
         dd = [li for li in lis if 'Data directory' in li]
         if len(dd) > 0:
             break
@@ -108,7 +116,7 @@ def getLoggedInfo(cfg):
     if len(caps)> 0:
         capdir = caps[-1]
     else:
-        return 0,0,0,datestamp
+        return 0,0,0,datestamp,nextcapstart
     ftpfs = glob.glob(os.path.join(capdir, 'FTPdetectinfo*.txt'))
     ftpf = [f for f in ftpfs if 'backup' not in f and 'unfiltered' not in f]
     meteorcount = 0
@@ -119,7 +127,9 @@ def getLoggedInfo(cfg):
     # if meteorcount is nonzero but detected count is zero then the logfile was malformed
     if detectedcount == 0 and meteorcount > 0:
         detectedcount = meteorcount
-    return detectedcount, meteorcount, starcount, datestamp
+    if not nextcapstart:
+        nextcapstart = ''
+    return detectedcount, meteorcount, starcount, datestamp, nextcapstart
 
 
 def sendMatchdataToMqtt(statid=''):
@@ -248,8 +258,9 @@ def sendToMqtt(statid=''):
             if 'test' not in camname:
                 camname = cfg.stationID.lower()
 
-        detectioncount, metcount, _, datestamp = getLoggedInfo(cfg)
-        msgs =[detectioncount, metcount, datestamp]
+        detectioncount, metcount, _, datestamp, nextcapstart = getLoggedInfo(cfg)
+        msgs =[detectioncount, metcount, datestamp, nextcapstart]
+        subtopics = ['detectioncount','meteorcount','timestamp','nextcapstart']
 
         client = paho.Client(camname)
         client.username_pw_set(username, password)
@@ -258,7 +269,6 @@ def sendToMqtt(statid=''):
         client.on_connect = on_connect
         client.on_publish = on_publish
         client.connect(broker, mqport, 60)
-        subtopics = ['detectioncount','meteorcount','timestamp']
         for subtopic, msg in zip(subtopics, msgs): 
             topic = f'{topicbase}/{camname}/{subtopic}'
             sleep(1)
