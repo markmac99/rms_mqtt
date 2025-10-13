@@ -67,68 +67,67 @@ def on_publish(client, userdata, result):
 
 
 def getLoggedInfo(cfg):
+    datestamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
     log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
     logfs = glob.glob(os.path.join(log_dir, 'log*.log*'))
     logfs.sort(key=lambda x: os.path.getmtime(x))
-    datestamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
-    nextcapstart = None
+    logfs = sorted(logfs, reverse=True)
     if len(logfs) == 0:
         return 0,0,0,datestamp, ''
-    dd=[]
-    i=1
-    
-    while len(dd) == 0 and i < len(logfs) + 1:
-        last_log = logfs[-i]
-        lis = open(last_log,'r').readlines()
+
+    starcount = 0
+    meteorcount = 0
+    detectedcount = None
+    nextcapstart = None
+
+    for logf in logfs:
+        lis = open(logf,'r').readlines()
+        # get nextcapstart
         if not nextcapstart:
             lst = [li for li in lis if 'Next start time:' in li]
             if len(lst) != 0:
                 lst = lst[-1]
                 nextcapstart = lst.split(': ')[1].strip()
                 log.info(f' nextcapstart {nextcapstart}')
-
-        dd = [li for li in lis if 'Data directory' in li]
-        if len(dd) > 0:
+        # get total detections reported in the log
+        if not detectedcount:
+            totli = [li for li in lis if 'TOTAL' in li]
+            if len(totli) > 0:
+                detectedcount = int(totli[0].split(' ')[4].strip())
+        if detectedcount is not None and nextcapstart is not None:
             break
-        i = i + 1
-    # print('last log', last_log)
-    totli = [li for li in lis if 'TOTAL' in li]
-    detectedcount = 0
-    if len(totli) > 0:
-        detectedcount = int(totli[0].split(' ')[4].strip())
 
-    current_log = logfs[-1]
-    lis = open(current_log,'r').readlines()
+    # get current star count reported in the log
+    lis = open(logfs[0],'r').readlines()
     sc = [li for li in lis if 'Detected stars' in li]
-    starcount = 0
     if len(sc) > 0:
         try:
             starcount = int(sc[-1].split()[5])
         except Exception:
-            pass
+            starcount = 0
 
-    meteorcount = 0
+    # count the number of meteors reported in the ftpdetect file
     capdir = os.path.join(cfg.data_dir, 'CapturedFiles')
     yest = datetime.datetime.now() + datetime.timedelta(days=-1)
     datedir = glob.glob(f'*{yest.strftime("%Y%m%d")}*')
     caps = glob.glob(os.path.join(capdir, f'{datedir}*'))
     caps.sort(key=lambda x: os.path.getmtime(x))
-    if len(caps)> 0:
-        capdir = caps[-1]
-    else:
-        return 0,0,0,datestamp,nextcapstart
-    ftpfs = glob.glob(os.path.join(capdir, 'FTPdetectinfo*.txt'))
-    ftpf = [f for f in ftpfs if 'backup' not in f and 'unfiltered' not in f]
-    meteorcount = 0
-    if len(ftpf) > 0:
-        lis = open(ftpf[0],'r').readlines()
-        mc = [li for li in lis if 'Meteor Count' in li]
-        meteorcount = int(mc[0].split('=')[1].strip())
-    # if meteorcount is nonzero but detected count is zero then the logfile was malformed
-    if detectedcount == 0 and meteorcount > 0:
-        detectedcount = meteorcount
+    if len(caps) > 0:
+        capdir = sorted(caps, reverse=True)[0]
+        ftpfs = glob.glob(os.path.join(capdir, 'FTPdetectinfo*.txt'))
+        ftpf = [f for f in ftpfs if 'backup' not in f and 'unfiltered' not in f]
+        if len(ftpf) > 0:
+            lis = open(ftpf[0],'r').readlines()
+            mc = [li for li in lis if 'Meteor Count' in li]
+            meteorcount = int(mc[0].split('=')[1].strip())
+
+    # some sanity checks 
+    if not detectedcount:
+        detectedcount = 0
     if not nextcapstart:
         nextcapstart = ''
+    detectedcount = max(detectedcount, meteorcount)
+
     return detectedcount, meteorcount, starcount, datestamp, nextcapstart
 
 
