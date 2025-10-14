@@ -4,21 +4,18 @@
 #
 # read the README for information about how to install and use
 
-import paho.mqtt.client as paho
+from paho.mqtt.publish import multiple
 import datetime
 import os
 import sys
 import glob
-import logging
 import requests
 import configparser
 import shutil
 import ssl
-from time import sleep
+import platform
 
 import RMS.ConfigReader as cr
-
-log = logging.getLogger()
 
 
 def getfreemem():
@@ -41,7 +38,7 @@ def getfreemem():
         memusedpct = 0
         swapused = 0
         swapusedpct = 0
-        log.info('mem usage not supported on Windows')
+        print('mem usage not supported on Windows')
     return memused, memusedpct, swapused, swapusedpct
 
 
@@ -56,20 +53,20 @@ def getRMSConfig(statid, localcfg):
 # The callback function. It will be triggered when trying to connect to the MQTT broker
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        log.info("Connected success")
+        print("Connected success")
     else:
-        log.warning("Connected fail with code", rc)
+        print("Connected fail with code", rc)
 
 
 def on_publish(client, userdata, result):
-    log.info(f'data published - {result}')
+    print(f'data published - {result}')
     return
 
 
-def getLoggedInfo(cfg):
+def getLoggedInfo(cfg, camname):
     datestamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
     log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
-    logfs = glob.glob(os.path.join(log_dir, 'log*.log*'))
+    logfs = glob.glob(os.path.join(log_dir, f'log_{camname.upper()}*.log*'))
     logfs.sort(key=lambda x: os.path.getmtime(x))
     logfs = sorted(logfs, reverse=True)
     if len(logfs) == 0:
@@ -81,6 +78,7 @@ def getLoggedInfo(cfg):
     nextcapstart = None
 
     for logf in logfs:
+        print(f'checking in {logf}')
         lis = open(logf,'r').readlines()
         # get nextcapstart
         if not nextcapstart:
@@ -88,7 +86,7 @@ def getLoggedInfo(cfg):
             if len(lst) != 0:
                 lst = lst[-1]
                 nextcapstart = lst.split(': ')[1].strip()
-                log.info(f' nextcapstart {nextcapstart}')
+                print(f' nextcapstart {nextcapstart}')
         # get total detections reported in the log
         if not detectedcount:
             totli = [li for li in lis if 'TOTAL' in li]
@@ -140,17 +138,22 @@ def sendMatchdataToMqtt(statid=''):
         statids = [x[1].upper() for x in localcfg.items('stations')]
     else:
         statids = [statid]
-    ret = 0
+    broker = localcfg['mqtt']['broker']
+    mqport = int(localcfg['mqtt']['mqport'])
+    auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
+    if mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+    clientid = 'sendmatches'
+    msgs = []
+
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
-
-        broker = localcfg['mqtt']['broker']
-        mqport = int(localcfg['mqtt']['mqport'])
-        topicbase = 'meteorcams' 
         if 'test' in statid:
             camname = statid
         else:
-            camname = os.uname()[1]
+            camname = platform.node()
             if 'test' not in camname:
                 camname = cfg.stationID.lower()
 
@@ -171,18 +174,15 @@ def sendMatchdataToMqtt(statid=''):
             v1 = rawdata.count(f'{dtstr}_1')
             v2 = rawdata.count(f'{dtstr}_2')
             matchcount = matchcount + v1 + v2
-        client = paho.Client(camname)
-        client.on_connect = on_connect
-        client.on_publish = on_publish
-        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-        if mqport == 8883:
-            client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
-        client.connect(broker, mqport, 60)
-        topic = f'{topicbase}/{camname}/matchcount'
-        sleep(1)
-        ret = client.publish(topic, payload=matchcount, qos=0, retain=False)
-        log.info(f'there were {matchcount} matches last night for {camname}')
-        client.disconnect()
+        topic = f'meteorcams/{camname}/matchcount'
+        print(f'{topic} {matchcount}')
+        msgs.append((topic, matchcount, 1))
+    # now send everything
+    if len(msgs) > 0:
+        ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
+    else:
+        print('nothing to publish')
+        ret = 1
     return ret
 
 
@@ -195,26 +195,24 @@ def sendLiveMeteorCount(statid=''):
     else:
         statids = [statid]
 
+    broker = localcfg['mqtt']['broker']
+    mqport = int(localcfg['mqtt']['mqport'])
+    auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
+    if mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+    clientid = 'sendlivemeteors'
+    msgs = []
+
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
-
-        broker = localcfg['mqtt']['broker']
-        mqport = int(localcfg['mqtt']['mqport'])
-        topicbase = 'meteorcams' 
         if 'test' in statid:
             camname = statid
         else:
-            camname = os.uname()[1]
+            camname = platform.node()
             if 'test' not in camname:
                 camname = cfg.stationID.lower()
-
-        client = paho.Client(camname)
-        client.on_connect = on_connect
-        client.on_publish = on_publish
-        client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-        if mqport == 8883:
-            client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
-        client.connect(broker, mqport, 60)
 
         log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
         logfs = glob.glob(os.path.join(log_dir, 'ukmonlive*.log*'))
@@ -225,13 +223,16 @@ def sendLiveMeteorCount(statid=''):
             lis = open(logfs[-1]).readlines()
             msg = len([x for x in lis if 'uploading FF' in x])
 
-        subtopic = 'livecmeteorount'
-        topic = f'{topicbase}/{camname}/{subtopic}'
-        sleep(1)
-        ret = client.publish(topic, payload=msg, qos=0, retain=False)
-        client.disconnect()
-        log.info(f'sent {msg} to {topic} and got {ret}')
-    return 
+        topic = f'meteorcams/{camname}/livecmeteorount'
+        print(f'{topic} {msg}')
+        msgs.append((topic, msg, 1))
+    # now send everything
+    if len(msgs) > 0:
+        ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
+    else:
+        print('nothing to publish')
+        ret = 1
+    return ret
 
 
 def sendToMqtt(statid=''):
@@ -245,34 +246,28 @@ def sendToMqtt(statid=''):
 
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
-    username = localcfg['mqtt']['username']
-    password = localcfg['mqtt']['password']
-    topicbase = 'meteorcams' 
+    auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
+    if mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
         if 'test' in statid:
             camname = statid
         else:
-            camname = os.uname()[1]
+            camname = platform.node()
             if 'test' not in camname:
                 camname = cfg.stationID.lower()
 
-        detectioncount, metcount, _, datestamp, nextcapstart = getLoggedInfo(cfg)
-        msgs =[detectioncount, metcount, datestamp, nextcapstart]
-        subtopics = ['detectioncount','meteorcount','timestamp','nextcapstart']
-
-        client = paho.Client(camname)
-        client.username_pw_set(username, password)
-        if mqport == 8883:
-            client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
-        client.on_connect = on_connect
-        client.on_publish = on_publish
-        client.connect(broker, mqport, 60)
-        for subtopic, msg in zip(subtopics, msgs): 
-            topic = f'{topicbase}/{camname}/{subtopic}'
-            sleep(1)
-            ret = client.publish(topic, payload=msg, qos=0, retain=False)
-        client.disconnect()
+        detectioncount, metcount, starcount, datestamp, nextcapstart = getLoggedInfo(cfg, camname)
+        print(f'logged info detcount {detectioncount} metcount {metcount} starcount {starcount} nextstart {nextcapstart}')
+        msgs = [(f'meteorcams/{camname}/detectioncount', detectioncount, 1),
+                (f'meteorcams/{camname}/meteorcount', metcount,1),
+                (f'meteorcams/{camname}/timestamp',datestamp,1),
+                (f'meteorcams/{camname}/nextcapstart', nextcapstart,1)]
+        ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=camname, keepalive=60, auth=auth, tls=tls)
     return ret
 
 
@@ -285,61 +280,51 @@ def sendStarCountToMqtt(statid=''):
     else:
         statids = [statid]
     ret = 0
+
+    broker = localcfg['mqtt']['broker']
+    mqport = int(localcfg['mqtt']['mqport'])
+    auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
+    if mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+    clientid = 'starcount'
+    msgs = []
     for statid in statids:
         cfg = getRMSConfig(statid, localcfg)
-        broker = localcfg['mqtt']['broker']
-        mqport = int(localcfg['mqtt']['mqport'])
-        topicbase = 'meteorcams' 
 
         if 'test' in statid:
             camname = statid
         else:
-            camname = os.uname()[1]
+            camname = platform.node()
             if 'test' not in camname:
                 camname = cfg.stationID.lower()
 
         log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
-        logfs = glob.glob(os.path.join(log_dir, 'log*.log*'))
+        logfs = glob.glob(os.path.join(log_dir, f'log_{camname}*.log*'))
         logfs.sort(key=lambda x: os.path.getmtime(x))
+        logfs = sorted(logfs, reverse=True)
         starcount = 0
-        tstamp = None
-        if len(logfs) > 0:
-            current_log = logfs[-1]
-            log.info(f'current log is {current_log}')
+        for current_log in logfs:
+            print(f'current log is {current_log}')
             lis = open(current_log,'r').readlines()
             sc = [li for li in lis if 'Detected stars' in li]
             if len(sc) > 0:
                 try:
                     starcount = int(sc[-1].split()[5])
-                    tstamp = sc[-1].split('-')[0]
+                    break
                 except Exception:
-                    pass
-            else:
-                current_log = logfs[-2]
-                log.info(f'current log is {current_log}')
-                lis = open(current_log,'r').readlines()
-                sc = [li for li in lis if 'Detected stars' in li]
-                if len(sc) > 0:
-                    try:
-                        starcount = int(sc[-1].split()[5])
-                        tstamp = sc[-1].split('-')[0]
-                    except Exception:
-                        pass
+                    starcount = 0
+        topic = f'meteorcams/{camname}/starcount'
+        print(f'{topic} {starcount}')
+        msgs.append((topic, starcount, 1))
 
-            if tstamp is not None or 'test' in camname: 
-                client = paho.Client(camname)
-                client.on_connect = on_connect
-                client.on_publish = on_publish
-                client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-                if mqport == 8883:
-                    client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
-                client.connect(broker, mqport, 60)
-
-                topic = f'{topicbase}/{camname}/starcount'
-                sleep(1)
-                ret = client.publish(topic, payload=starcount, qos=0, retain=False)
-                log.info(f'sent {starcount} to {topic} and got {ret}')
-                client.disconnect()
+    # now send everything
+    if len(msgs) > 0:
+        ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
+    else:
+        print('nothing to publish')
+        ret = 1
     return ret
 
 
@@ -350,6 +335,13 @@ def sendOtherData(cputemp=None, statid=''):
     
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
+    auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
+    if mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+    clientid = 'otherdata'
+    msgs = []
 
     # use the 1st station id if nothing provided on the commandline
     if statid == '':
@@ -363,7 +355,7 @@ def sendOtherData(cputemp=None, statid=''):
     if 'test' in statid:
         camname = statid
     else:
-        camname = os.uname()[1]
+        camname = platform.node()
         if 'test' not in camname:
             camname = cfg.stationID.lower()
 
@@ -376,57 +368,18 @@ def sendOtherData(cputemp=None, statid=''):
 
     memused, memusedpct, swapused, swapusedpct = getfreemem()
 
-    client = paho.Client(camname)
-    client.on_connect = on_connect
-    client.on_publish = on_publish
-    client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    if mqport == 8883:
-        client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
-    client.connect(broker, mqport, 60)
-    print(broker, mqport)
-    topics = ['cputemp','diskspace','memused','memusedpct','swapused','swapusedpct']
-    vals = [cputemp, diskspace, memused, memusedpct, swapused, swapusedpct]
-
-    for subtopic, val in zip(topics, vals):
-        topic = f'meteorcams/{camname}/{subtopic}'
-        sleep(1)
-        ret = client.publish(topic, payload=val, qos=0, retain=False)
-    client.disconnect()
+    msgs = [(f'meteorcams/{camname}/cputemp', cputemp, 1),
+            (f'meteorcams/{camname}/diskspace', diskspace,1),
+            (f'meteorcams/{camname}/memused', memused,1),
+            (f'meteorcams/{camname}/memusedpct', memusedpct,1),
+            (f'meteorcams/{camname}/swapusedpct', swapused,1),
+            (f'meteorcams/{camname}/swapusedpct', swapusedpct,1)]
+    ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
     return ret
-
-
-def test_mqtt(statid=''):
-    srcdir = os.path.split(os.path.abspath(__file__))[0]
-    localcfg = configparser.ConfigParser()
-    localcfg.read(os.path.join(srcdir, 'config.ini'))
-    cfg = getRMSConfig(statid, localcfg)
-    broker = localcfg['mqtt']['broker']
-    mqport = int(localcfg['mqtt']['mqport'])
-    if 'test' in statid:
-        camname = statid
-    else:
-        camname = os.uname()[1]
-        if 'test' not in camname:
-            camname = cfg.stationID.lower()
-
-    client = paho.Client(camname)
-    topic = f'testing/{camname}/test'
-    client.on_connect = on_connect
-    client.on_publish = on_publish
-    client.username_pw_set(localcfg['mqtt']['username'], localcfg['mqtt']['password'])
-    if mqport == 8883:
-        client.tls_set(ca_certs=None, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS)
-    client.connect(broker, mqport, 60)
-    sleep(1)
-    ret = client.publish(topic, payload=f'test from {camname}', qos=0, retain=False)
-    log.info(f"send to {topic}, result {ret}")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('usage: python sendToMqtt stationid')
         exit(0)
-    if len(sys.argv) > 2:
-        test_mqtt(sys.argv[1])
-    else:
-        sendToMqtt(sys.argv[1])
+    sendToMqtt(sys.argv[1])
