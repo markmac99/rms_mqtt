@@ -15,7 +15,11 @@ import shutil
 import ssl
 import platform
 
-import RMS.ConfigReader as cr
+try:
+    import RMS.ConfigReader as cr
+    gotRMS = True
+except Exception:
+    gotRMS = False
 
 
 def getfreemem():
@@ -43,24 +47,20 @@ def getfreemem():
 
 
 def getRMSConfig(statid, localcfg):
-    rmscfg = os.path.expanduser(f'~/source/Stations/{statid}/.config')
-    if not os.path.isfile(rmscfg):
-        rmscfg = os.path.join(localcfg['rms']['rmsdir'], '.config')
-    cfg = cr.parse(os.path.expanduser(rmscfg))
-    return cfg
-
-
-# The callback function. It will be triggered when trying to connect to the MQTT broker
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("Connected success")
+    if gotRMS:
+        rmscfg = os.path.expanduser(f'~/source/Stations/{statid}/.config')
+        if not os.path.isfile(rmscfg):
+            rmscfg = os.path.join(localcfg['rms']['rmsdir'], '.config')
+        cfg = cr.parse(os.path.expanduser(rmscfg))
+        topicroot = 'meteorcams'
     else:
-        print("Connected fail with code", rc)
-
-
-def on_publish(client, userdata, result):
-    print(f'data published - {result}')
-    return
+        class dummycfg():
+            def __init__(self):
+                self.data_dir = '/'
+                self.stationID = platform.node()
+        cfg = dummycfg()
+        topicroot = 'servers'
+    return cfg, topicroot
 
 
 def getLoggedInfo(cfg, camname):
@@ -105,14 +105,12 @@ def getLoggedInfo(cfg, camname):
             starcount = 0
 
     # count the number of meteors reported in the ftpdetect file
-    capdir = os.path.join(cfg.data_dir, 'CapturedFiles')
-    yest = datetime.datetime.now() + datetime.timedelta(days=-1)
-    datedir = glob.glob(f'*{yest.strftime("%Y%m%d")}*')
-    caps = glob.glob(os.path.join(capdir, f'{datedir}*'))
-    caps.sort(key=lambda x: os.path.getmtime(x))
-    if len(caps) > 0:
-        capdir = sorted(caps, reverse=True)[0]
-        ftpfs = glob.glob(os.path.join(capdir, 'FTPdetectinfo*.txt'))
+    arcdir = os.path.join(cfg.data_dir, 'ArchivedFiles')
+    arcs = glob.glob(os.path.join(arcdir,'*'))
+    arcs = [arc for arc in arcs if os.path.isdir(arc)]
+    if len(arcs) > 0: 
+        arcs = sorted(arcs, reverse=True)
+        ftpfs = glob.glob(os.path.join(arcs[0], 'FTPdetectinfo*.txt'))
         ftpf = [f for f in ftpfs if 'backup' not in f and 'unfiltered' not in f]
         if len(ftpf) > 0:
             lis = open(ftpf[0],'r').readlines()
@@ -149,7 +147,7 @@ def sendMatchdataToMqtt(statid=''):
     msgs = []
 
     for statid in statids:
-        cfg = getRMSConfig(statid, localcfg)
+        cfg, _ = getRMSConfig(statid, localcfg)
         if 'test' in statid:
             camname = statid
         else:
@@ -206,7 +204,7 @@ def sendLiveMeteorCount(statid=''):
     msgs = []
 
     for statid in statids:
-        cfg = getRMSConfig(statid, localcfg)
+        cfg, _ = getRMSConfig(statid, localcfg)
         if 'test' in statid:
             camname = statid
         else:
@@ -253,7 +251,7 @@ def sendToMqtt(statid=''):
         tls = None
 
     for statid in statids:
-        cfg = getRMSConfig(statid, localcfg)
+        cfg, _ = getRMSConfig(statid, localcfg)
         if 'test' in statid:
             camname = statid
         else:
@@ -265,6 +263,7 @@ def sendToMqtt(statid=''):
         print(f'logged info detcount {detectioncount} metcount {metcount} starcount {starcount} nextstart {nextcapstart}')
         msgs = [(f'meteorcams/{camname}/detectioncount', detectioncount, 1),
                 (f'meteorcams/{camname}/meteorcount', metcount,1),
+                (f'meteorcams/{camname}/starcount', starcount,1),
                 (f'meteorcams/{camname}/timestamp',datestamp,1),
                 (f'meteorcams/{camname}/nextcapstart', nextcapstart,1)]
         ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=camname, keepalive=60, auth=auth, tls=tls)
@@ -291,7 +290,7 @@ def sendStarCountToMqtt(statid=''):
     clientid = 'starcount'
     msgs = []
     for statid in statids:
-        cfg = getRMSConfig(statid, localcfg)
+        cfg, _ = getRMSConfig(statid, localcfg)
 
         if 'test' in statid:
             camname = statid
@@ -347,7 +346,7 @@ def sendOtherData(cputemp=None, statid=''):
     if statid == '':
         statids = [x[1].upper() for x in localcfg.items('stations')]
         statid = statids[0]
-    cfg = getRMSConfig(statid, localcfg)
+    cfg, topicroot = getRMSConfig(statid, localcfg)
     
     usage = shutil.disk_usage(cfg.data_dir)
     diskspace = round((usage.used/usage.total)*100, 2)
@@ -368,12 +367,12 @@ def sendOtherData(cputemp=None, statid=''):
 
     memused, memusedpct, swapused, swapusedpct = getfreemem()
 
-    msgs = [(f'meteorcams/{camname}/cputemp', cputemp, 1),
-            (f'meteorcams/{camname}/diskspace', diskspace,1),
-            (f'meteorcams/{camname}/memused', memused,1),
-            (f'meteorcams/{camname}/memusedpct', memusedpct,1),
-            (f'meteorcams/{camname}/swapusedpct', swapused,1),
-            (f'meteorcams/{camname}/swapusedpct', swapusedpct,1)]
+    msgs = [(f'{topicroot}/{camname}/cputemp', cputemp, 1),
+            (f'{topicroot}/{camname}/diskspace', diskspace,1),
+            (f'{topicroot}/{camname}/memused', memused,1),
+            (f'{topicroot}/{camname}/memusedpct', memusedpct,1),
+            (f'{topicroot}/{camname}/swapusedpct', swapused,1),
+            (f'{topicroot}/{camname}/swapusedpct', swapusedpct,1)]
     ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
     return ret
 
