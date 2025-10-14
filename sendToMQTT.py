@@ -371,7 +371,7 @@ def sendOtherData(cputemp=None, statid=''):
             (f'{topicroot}/{camname}/diskspace', diskspace,1),
             (f'{topicroot}/{camname}/memused', memused,1),
             (f'{topicroot}/{camname}/memusedpct', memusedpct,1),
-            (f'{topicroot}/{camname}/swapusedpct', swapused,1),
+            (f'{topicroot}/{camname}/swapused', swapused,1),
             (f'{topicroot}/{camname}/swapusedpct', swapusedpct,1)]
     ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
     return ret
