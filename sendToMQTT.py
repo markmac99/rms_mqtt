@@ -17,6 +17,7 @@ import platform
 
 try:
     import RMS.ConfigReader as cr
+    from RMS.CaptureDuration import captureDuration
     gotRMS = True
 except Exception:
     gotRMS = False
@@ -77,10 +78,22 @@ def getLoggedInfo(cfg, camname):
     detectedcount = None
     nextcapstart = None
 
+    # see if we can get next cap start from RMS's builtin routine
+    if gotRMS:
+        nsc = True
+        doff = 0
+        while nsc is True and doff < 24:
+            dtadj = datetime.datetime.now()+datetime.timedelta(hours=doff)
+            nsc, _ = captureDuration(cfg.latitude, cfg.longitude, cfg.elevation, dtadj)
+            print(nsc)
+            doff = doff + 1
+            nextcapstart = str(nsc) + ' UTC'
+            print('got next cap start from RMS')
+
     for logf in logfs:
-        print(f'checking in {logf}')
+        print(f'checking for detections in {logf}')
         lis = open(logf,'r').readlines()
-        # get nextcapstart
+        # get nextcapstart if not already obtained
         if not nextcapstart:
             lst = [li for li in lis if 'Next start time:' in li]
             if len(lst) != 0:
