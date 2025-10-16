@@ -20,9 +20,9 @@ pip install -r requirements.txt
 ```
 
 ## Configuration
-Copy `config.ini.example` to `config.ini` and update it with the details of your MQ server. At this time, SSL is not supported so CAFILE is not required. 
+Copy `config.ini.example` to `config.ini` and update it with the details of your MQ broker. If your uses SSL, you'll probably want port 8883 but otherwise its normally 1883.
 
-If you're *not* using a multi-cam setup, update `RMSDIR` with the full path of the folder containing RMS, for example `/home/rms/source/RMS`. For multi-cam setups, the code will automatically find the correct configuration files. 
+If you're *not* using a multi-cam setup, update `RMSDIR` with the full path of the folder containing RMS, for example `/home/rms/source/RMS`. For multi-cam setups, the code will automatically find the correct configuration files. This might also be required on some non-multicam setups if your RMS source is in an unusual place. 
 
 Add your Camera IDs to the `[stations]` section, as shown below. You can add/remove IDs as needed. 
 ``` bash
@@ -42,10 +42,13 @@ This will publish to a topic `meteorcams/testing`.
 
 There are four functions that can be used to submit meteor-related data to MQ:
 
-* `sendToMqtt` will publish the latest count of detections and meteors. 
+* `sendToMqtt` will publish the latest count of detections, meteors, and the next capture start-time. 
 * `sendStarCountToMqtt` will publish the latest star count. 
+* `sendOtherData` will publish some system performance metrics - see below. 
+
+And if and only if you're a UKMON contributor you can use the following: 
 * `sendLiveMeteorCount` will publish a live count of potential detections.  
-* `sendMatchdataToMqtt` if you're a UKMON member then this will publish the count of confirmed matches your station was involved in. 
+* `sendMatchdataToMqtt` this will publish the count of confirmed matches your station was involved in. 
 
 ### Tracking Star and Live Detection Counts and Pi Statistics
 To track the star count and live meteor counts at ten minute intervals, add an entry to the crontab like the one below. This will also track diskspace and CPU temperature. 
@@ -71,11 +74,11 @@ This version will explicitly try to obtain data for station `UK1234`, if its ava
 python -c "from sendToMQTT import sendToMqtt;sendToMqtt(statid='UK1234')"
 ```
 
-### CPU temperature and diskspace
-`sendOtherData` can be used to publish CPU temperature and free diskspace on the disk holding `RMS_data`. 
+### CPU temperature, diskspace and memory usage
+`sendOtherData` can be used to publish CPU temperature, memory and swap usage and free diskspace on the disk holding `RMS_data`. 
 
-The function currently doesn't support Windows, because CPU temp is not easy to obtain on Windows without 
-administrator permissions (Ask Microsoft....). Hence for Windows this function will publish a value of zero for CPU temp. If you have the CPU temp from some other source you can feed it into the function as shown below.
+CPU  temp is not easy to obtain on Windows without 
+administrator permissions (Ask Microsoft....). Hence for Windows this function will publish a value of zero for CPU temp. 
 
 Note that the data are published to a topic `meteorcams/{camid}/` where camid is the the first station listed in the config file. 
 
