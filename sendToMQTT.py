@@ -64,7 +64,7 @@ def getRMSConfig(statid, localcfg):
     return cfg, topicroot
 
 
-def getLoggedInfo(cfg, camname):
+def getLoggedInfo(cfg, camname, starcountonly=False):
     datestamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
     log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
     logfs = glob.glob(os.path.join(log_dir, f'log_{camname.upper()}*.log*'))
@@ -78,35 +78,49 @@ def getLoggedInfo(cfg, camname):
     detectedcount = None
     nextcapstart = None
 
-    # see if we can get next cap start from RMS's builtin routine
-    if gotRMS:
-        nsc = True
-        doff = 0
-        while nsc is True and doff < 24:
-            dtadj = datetime.datetime.now()+datetime.timedelta(hours=doff)
-            nsc, _ = captureDuration(cfg.latitude, cfg.longitude, cfg.elevation, dtadj)
-            print(nsc)
-            doff = doff + 1
-            nextcapstart = str(nsc) + ' UTC'
-            print('got next cap start from RMS')
+    if not starcountonly:
+        # see if we can get next cap start from RMS's builtin routine
+        if gotRMS:
+            nsc = True
+            doff = 0
+            while nsc is True and doff < 24:
+                dtadj = datetime.datetime.now()+datetime.timedelta(hours=doff)
+                nsc, _ = captureDuration(cfg.latitude, cfg.longitude, cfg.elevation, dtadj)
+                print(nsc)
+                doff = doff + 1
+                nextcapstart = str(nsc) + ' UTC'
+                print('got next cap start from RMS')
 
-    for logf in logfs:
-        print(f'checking for detections in {logf}')
-        lis = open(logf,'r').readlines()
-        # get nextcapstart if not already obtained
-        if not nextcapstart:
-            lst = [li for li in lis if 'Next start time:' in li]
-            if len(lst) != 0:
-                lst = lst[-1]
-                nextcapstart = lst.split(': ')[1].strip()
-                print(f' nextcapstart {nextcapstart}')
-        # get total detections reported in the log
-        if not detectedcount:
-            totli = [li for li in lis if 'TOTAL' in li]
-            if len(totli) > 0:
-                detectedcount = int(totli[0].split(' ')[4].strip())
-        if detectedcount is not None and nextcapstart is not None:
-            break
+        for logf in logfs:
+            print(f'checking for detections in {logf}')
+            lis = open(logf,'r').readlines()
+            # get nextcapstart if not already obtained
+            if not nextcapstart:
+                lst = [li for li in lis if 'Next start time:' in li]
+                if len(lst) != 0:
+                    lst = lst[-1]
+                    nextcapstart = lst.split(': ')[1].strip()
+                    print(f' nextcapstart {nextcapstart}')
+            # get total detections reported in the log
+            if not detectedcount:
+                totli = [li for li in lis if 'TOTAL' in li]
+                if len(totli) > 0:
+                    detectedcount = int(totli[0].split(' ')[4].strip())
+            if detectedcount is not None and nextcapstart is not None:
+                break
+
+        # count the number of meteors reported in the ftpdetect file
+        arcdir = os.path.join(cfg.data_dir, 'ArchivedFiles')
+        arcs = glob.glob(os.path.join(arcdir,'*'))
+        arcs = [arc for arc in arcs if os.path.isdir(arc)]
+        if len(arcs) > 0: 
+            arcs = sorted(arcs, reverse=True)
+            ftpfs = glob.glob(os.path.join(arcs[0], 'FTPdetectinfo*.txt'))
+            ftpf = [f for f in ftpfs if 'backup' not in f and 'unfiltered' not in f]
+            if len(ftpf) > 0:
+                lis = open(ftpf[0],'r').readlines()
+                mc = [li for li in lis if 'Meteor Count' in li]
+                meteorcount = int(mc[0].split('=')[1].strip())
 
     # get current star count reported in the log
     lis = open(logfs[0],'r').readlines()
@@ -116,19 +130,6 @@ def getLoggedInfo(cfg, camname):
             starcount = int(sc[-1].split()[5])
         except Exception:
             starcount = 0
-
-    # count the number of meteors reported in the ftpdetect file
-    arcdir = os.path.join(cfg.data_dir, 'ArchivedFiles')
-    arcs = glob.glob(os.path.join(arcdir,'*'))
-    arcs = [arc for arc in arcs if os.path.isdir(arc)]
-    if len(arcs) > 0: 
-        arcs = sorted(arcs, reverse=True)
-        ftpfs = glob.glob(os.path.join(arcs[0], 'FTPdetectinfo*.txt'))
-        ftpf = [f for f in ftpfs if 'backup' not in f and 'unfiltered' not in f]
-        if len(ftpf) > 0:
-            lis = open(ftpf[0],'r').readlines()
-            mc = [li for li in lis if 'Meteor Count' in li]
-            meteorcount = int(mc[0].split('=')[1].strip())
 
     # some sanity checks 
     if not detectedcount:
@@ -312,21 +313,7 @@ def sendStarCountToMqtt(statid=''):
             if 'test' not in camname:
                 camname = cfg.stationID.lower()
 
-        log_dir = os.path.join(cfg.data_dir, cfg.log_dir)
-        logfs = glob.glob(os.path.join(log_dir, f'log_{camname}*.log*'))
-        logfs.sort(key=lambda x: os.path.getmtime(x))
-        logfs = sorted(logfs, reverse=True)
-        starcount = 0
-        for current_log in logfs:
-            print(f'current log is {current_log}')
-            lis = open(current_log,'r').readlines()
-            sc = [li for li in lis if 'Detected stars' in li]
-            if len(sc) > 0:
-                try:
-                    starcount = int(sc[-1].split()[5])
-                    break
-                except Exception:
-                    starcount = 0
+        _, _, starcount, _, _ = getLoggedInfo(cfg, camname, starcountonly=True)
         topic = f'meteorcams/{camname}/starcount'
         print(f'{topic} {starcount}')
         msgs.append((topic, starcount, 1))
