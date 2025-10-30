@@ -14,6 +14,8 @@ import configparser
 import shutil
 import ssl
 import platform
+import re
+import subprocess
 
 try:
     import RMS.ConfigReader as cr
@@ -21,6 +23,23 @@ try:
     gotRMS = True
 except Exception:
     gotRMS = False
+
+
+def ping(host, count=1):
+    # ping the target. Note that on Windows, ping returns True even if the host was
+    # unreachable
+    param = '-n' if platform.system().lower()=='windows' else '-c'
+    command = ['ping', param, str(count), host]
+    #print(f'pinging {command}')
+    pingres = subprocess.check_output(command)
+    try:
+        if b'timed out' in pingres or b'unreachable' in pingres or b'Lost = 1' in pingres: 
+            print('ping timeout or unreachable')
+            return False
+        return True
+    except Exception as e:
+        print(f'ping failed {e}')
+        return False
 
 
 def getfreemem():
@@ -139,6 +158,47 @@ def getLoggedInfo(cfg, camname, starcountonly=False):
     detectedcount = max(detectedcount, meteorcount)
 
     return detectedcount, meteorcount, starcount, datestamp, nextcapstart
+
+
+def sendCameraStatus(statid=''):
+    srcdir = os.path.split(os.path.abspath(__file__))[0]
+    localcfg = configparser.ConfigParser()
+    localcfg.read(os.path.join(srcdir, 'config.ini'))
+
+    if statid == '':
+        statids = [x[1].upper() for x in localcfg.items('stations')]
+    else:
+        statids = [statid]
+    broker = localcfg['mqtt']['broker']
+    mqport = int(localcfg['mqtt']['mqport'])
+    auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
+    if mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+    clientid = 'sendmatches'
+    msgs = []
+
+    for statid in statids:
+        cfg, _ = getRMSConfig(statid, localcfg)
+        if 'test' in statid:
+            camname = statid
+        else:
+            camname = platform.node()
+            if 'test' not in camname:
+                camname = cfg.stationID.lower()
+        camipaddr = re.findall(r"[0-9]+(?:\.[0-9]+){3}", cfg.deviceID)[0]
+        camerastatus = ping(camipaddr)
+        topic = f'meteorcams/{camname}/camerastatus'
+        print(f'{topic} {camerastatus}')
+        msgs.append((topic, camerastatus, 1))
+    # now send everything
+    if len(msgs) > 0:
+        ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
+    else:
+        print('nothing to publish')
+        ret = 1
+    return ret
 
 
 def sendMatchdataToMqtt(statid=''):
