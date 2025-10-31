@@ -31,8 +31,8 @@ def ping(host, count=1):
     param = '-n' if platform.system().lower()=='windows' else '-c'
     command = ['ping', param, str(count), host]
     #print(f'pinging {command}')
-    pingres = subprocess.check_output(command)
     try:
+        pingres = subprocess.check_output(command)
         if b'timed out' in pingres or b'unreachable' in pingres or b'Lost = 1' in pingres: 
             print('ping timeout or unreachable')
             return 0
