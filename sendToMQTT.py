@@ -181,7 +181,7 @@ def sendCameraStatus(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
-        if 'test' in statid:
+        if 'test' in statid.lower():
             camname = statid
         else:
             camname = platform.node()
@@ -222,7 +222,7 @@ def sendMatchdataToMqtt(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
-        if 'test' in statid:
+        if 'test' in statid.lower():
             camname = statid
         else:
             camname = platform.node()
@@ -279,7 +279,7 @@ def sendLiveMeteorCount(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
-        if 'test' in statid:
+        if 'test' in statid.lower():
             camname = statid
         else:
             camname = platform.node()
@@ -326,7 +326,7 @@ def sendToMqtt(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
-        if 'test' in statid:
+        if 'test' in statid.lower():
             camname = statid
         else:
             camname = platform.node()
@@ -411,7 +411,7 @@ def sendOtherData(cputemp=None, statid=''):
     usage = shutil.disk_usage(cfg.data_dir)
     diskspace = round((usage.used/usage.total)*100, 2)
 
-    if 'test' in statid:
+    if 'test' in statid.lower():
         camname = statid
     else:
         camname = platform.node()
