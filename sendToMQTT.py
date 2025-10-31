@@ -366,7 +366,7 @@ def sendStarCountToMqtt(statid=''):
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
 
-        if 'test' in statid:
+        if 'test' in statid.lower():
             camname = statid
         else:
             camname = platform.node()
