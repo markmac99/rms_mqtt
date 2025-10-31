@@ -35,11 +35,11 @@ def ping(host, count=1):
     try:
         if b'timed out' in pingres or b'unreachable' in pingres or b'Lost = 1' in pingres: 
             print('ping timeout or unreachable')
-            return False
-        return True
+            return 0
+        return 1
     except Exception as e:
         print(f'ping failed {e}')
-        return False
+        return 0
 
 
 def getfreemem():
