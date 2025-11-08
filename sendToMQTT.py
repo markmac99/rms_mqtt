@@ -409,7 +409,8 @@ def sendOtherData(cputemp=None, statid=''):
     cfg, topicroot = getRMSConfig(statid, localcfg)
     
     usage = shutil.disk_usage(cfg.data_dir)
-    diskspace = round((usage.used/usage.total)*100, 2)
+    # this shows how much space is unavailable. (not the same as 'used')
+    diskspace = round((1 - usage.free/usage.total)*100, 2)
 
     if 'test' in statid.lower():
         camname = statid
