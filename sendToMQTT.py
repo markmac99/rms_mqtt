@@ -16,6 +16,11 @@ import ssl
 import platform
 import re
 import subprocess
+try:
+    from psutil import boot_time
+    boottime = True
+except:
+    boottime = False
 
 try:
     import RMS.ConfigReader as cr
@@ -40,7 +45,16 @@ def ping(host, count=1):
     except Exception as e:
         print(f'ping failed {e}')
         return 0
+    
 
+def getBootTime():
+    if boottime:
+        last_reboot = boot_time()
+        return datetime.datetime.fromtimestamp(last_reboot).strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        print('boot time not available')
+        return 'unavailable'
+    
 
 def getfreemem():
     if sys.platform != 'win32':
@@ -428,12 +442,16 @@ def sendOtherData(cputemp=None, statid=''):
 
     memused, memusedpct, swapused, swapusedpct = getfreemem()
 
+    lastboot = getBootTime()
+
     msgs = [(f'{topicroot}/{camname}/cputemp', cputemp, 1),
             (f'{topicroot}/{camname}/diskspace', diskspace,1),
             (f'{topicroot}/{camname}/memused', memused,1),
             (f'{topicroot}/{camname}/memusedpct', memusedpct,1),
             (f'{topicroot}/{camname}/swapused', swapused,1),
-            (f'{topicroot}/{camname}/swapusedpct', swapusedpct,1)]
+            (f'{topicroot}/{camname}/swapusedpct', swapusedpct,1),
+            (f'{topicroot}/{camname}/lastboot', lastboot,1)]
+    
     ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
     return ret
 
