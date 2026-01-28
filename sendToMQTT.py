@@ -92,6 +92,7 @@ def getRMSConfig(statid, localcfg):
             def __init__(self):
                 self.data_dir = '/'
                 self.stationID = platform.node()
+                self.log_dir = 'nonrms'
         cfg = dummycfg()
         topicroot = 'servers'
     return cfg, topicroot
@@ -195,6 +196,8 @@ def sendCameraStatus(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
+        if cfg.log_dir=='nonrms':
+            continue
         if 'test' in statid.lower():
             camname = statid
         else:
@@ -236,6 +239,8 @@ def sendMatchdataToMqtt(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
+        if cfg.log_dir=='nonrms':
+            continue
         if 'test' in statid.lower():
             camname = statid
         else:
@@ -293,6 +298,8 @@ def sendLiveMeteorCount(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
+        if cfg.log_dir=='nonrms':
+            continue
         if 'test' in statid.lower():
             camname = statid
         else:
@@ -452,6 +459,33 @@ def sendOtherData(cputemp=None, statid=''):
             (f'{topicroot}/{camname}/swapusedpct', swapusedpct,1),
             (f'{topicroot}/{camname}/lastboot', lastboot,1)]
     
+    ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
+    return ret
+
+
+def sendLastBoot(statid=''):
+    lastboot = getBootTime()
+    srcdir = os.path.split(os.path.abspath(__file__))[0]
+    localcfg = configparser.ConfigParser()
+    localcfg.read(os.path.join(srcdir, 'config.ini'))
+    
+    broker = localcfg['mqtt']['broker']
+    mqport = int(localcfg['mqtt']['mqport'])
+    auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
+    if mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+    clientid = 'otherdata'
+    cfg, topicroot = getRMSConfig(statid, localcfg)
+    if 'test' in statid.lower():
+        camname = statid
+    else:
+        camname = platform.node()
+        if 'test' not in camname:
+            camname = cfg.stationID.lower()
+
+    msgs = [(f'{topicroot}/{camname}/lastboot', lastboot,1)]
     ret = multiple(msgs=msgs, hostname=broker, port=mqport, client_id=clientid, keepalive=60, auth=auth, tls=tls)
     return ret
 
