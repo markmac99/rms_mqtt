@@ -347,6 +347,8 @@ def sendToMqtt(statid=''):
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
+        if cfg.log_dir == 'nonrms':
+            continue
         if 'test' in statid.lower():
             camname = statid
         else:
@@ -386,6 +388,8 @@ def sendStarCountToMqtt(statid=''):
     msgs = []
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
+        if cfg.log_dir == 'nonrms':
+            continue
 
         if 'test' in statid.lower():
             camname = statid
