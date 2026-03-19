@@ -70,7 +70,7 @@ def getfreemem():
         swtotal = float(swtotal[1].replace('kB',''))
         swavail = float(swavail[1].replace('kB',''))
         swapused = swtotal - swavail
-        swapusedpct = round(swapused * 100 / total, 2)
+        swapusedpct = round(swapused * 100 / swtotal, 2)
     else:
         memused = 0
         memusedpct = 0
