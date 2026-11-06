@@ -30,6 +30,12 @@ except Exception:
     gotRMS = False
 
 
+def clientId(base):
+    # MQTT client IDs must be unique per broker. Include the hostname so
+    # several RMS hosts sharing one broker don't disconnect each other.
+    return f'{base}-{platform.node()}'
+
+
 def ping(host, count=1):
     # ping the target. Note that on Windows, ping returns True even if the host was
     # unreachable
@@ -191,7 +197,7 @@ def sendCameraStatus(statid=''):
         tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
     else:
         tls = None
-    clientid = 'sendmatches'
+    clientid = clientId('camerastatus')
     msgs = []
 
     for statid in statids:
@@ -234,7 +240,7 @@ def sendMatchdataToMqtt(statid=''):
         tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
     else:
         tls = None
-    clientid = 'sendmatches'
+    clientid = clientId('sendmatches')
     msgs = []
 
     for statid in statids:
@@ -293,7 +299,7 @@ def sendLiveMeteorCount(statid=''):
         tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
     else:
         tls = None
-    clientid = 'sendlivemeteors'
+    clientid = clientId('sendlivemeteors')
     msgs = []
 
     for statid in statids:
@@ -384,7 +390,7 @@ def sendStarCountToMqtt(statid=''):
         tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
     else:
         tls = None
-    clientid = 'starcount'
+    clientid = clientId('starcount')
     msgs = []
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
@@ -424,7 +430,7 @@ def sendOtherData(cputemp=None, statid=''):
         tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
     else:
         tls = None
-    clientid = 'otherdata'
+    clientid = clientId('otherdata')
     msgs = []
 
     # use the 1st station id if nothing provided on the commandline
@@ -480,7 +486,7 @@ def sendLastBoot(statid=''):
         tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
     else:
         tls = None
-    clientid = 'otherdata'
+    clientid = clientId('lastboot')
     cfg, topicroot = getRMSConfig(statid, localcfg)
     if 'test' in statid.lower():
         camname = statid
