@@ -16,6 +16,8 @@ import ssl
 import platform
 import re
 import subprocess
+import pathlib
+
 try:
     from psutil import boot_time
     boottime = True
@@ -181,6 +183,18 @@ def getLoggedInfo(cfg, camname, starcountonly=False):
     return detectedcount, meteorcount, starcount, datestamp, nextcapstart
 
 
+def getTlsConfig(localcfg):
+    mqport = int(localcfg['mqtt']['mqport'])
+    cafile = localcfg['mqtt'].get('cafile', '')
+    if cafile:
+        tls = {'ca_certs':cafile, 'cert_reqs':ssl.CERT_NONE, 'tls_version':ssl.PROTOCOL_TLS}
+    elif mqport == 8883:
+        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_NONE, 'tls_version':ssl.PROTOCOL_TLS}
+    else:
+        tls = None
+    return tls
+
+
 def sendCameraStatus(statid=''):
     srcdir = os.path.split(os.path.abspath(__file__))[0]
     localcfg = configparser.ConfigParser()
@@ -193,10 +207,8 @@ def sendCameraStatus(statid=''):
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
     auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
-    if mqport == 8883:
-        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
-    else:
-        tls = None
+    tls = getTlsConfig(localcfg)
+
     clientid = clientId('camerastatus')
     msgs = []
 
@@ -236,10 +248,8 @@ def sendMatchdataToMqtt(statid=''):
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
     auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
-    if mqport == 8883:
-        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
-    else:
-        tls = None
+    tls = getTlsConfig(localcfg)
+
     clientid = clientId('sendmatches')
     msgs = []
 
@@ -295,10 +305,8 @@ def sendLiveMeteorCount(statid=''):
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
     auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
-    if mqport == 8883:
-        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
-    else:
-        tls = None
+    tls = getTlsConfig(localcfg)
+
     clientid = clientId('sendlivemeteors')
     msgs = []
 
@@ -346,10 +354,7 @@ def sendToMqtt(statid=''):
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
     auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
-    if mqport == 8883:
-        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
-    else:
-        tls = None
+    tls = getTlsConfig(localcfg)
 
     for statid in statids:
         cfg, _ = getRMSConfig(statid, localcfg)
@@ -386,10 +391,8 @@ def sendStarCountToMqtt(statid=''):
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
     auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
-    if mqport == 8883:
-        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
-    else:
-        tls = None
+    tls = getTlsConfig(localcfg)
+
     clientid = clientId('starcount')
     msgs = []
     for statid in statids:
@@ -426,10 +429,8 @@ def sendOtherData(cputemp=None, statid=''):
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
     auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
-    if mqport == 8883:
-        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
-    else:
-        tls = None
+    tls = getTlsConfig(localcfg)
+
     clientid = clientId('otherdata')
     msgs = []
 
@@ -438,10 +439,13 @@ def sendOtherData(cputemp=None, statid=''):
         statids = [x[1].upper() for x in localcfg.items('stations')]
         statid = statids[0]
     cfg, topicroot = getRMSConfig(statid, localcfg)
-    
-    usage = shutil.disk_usage(cfg.data_dir)
-    # this shows how much space is unavailable. (not the same as 'used')
-    diskspace = round((1 - usage.free/usage.total)*100, 2)
+
+    if not os.path.isdir(cfg.data_dir):
+        diskspace = 0
+    else:        
+        usage = shutil.disk_usage(cfg.data_dir)
+        # this shows how much space is unavailable. (not the same as 'used')
+        diskspace = round((1 - usage.free/usage.total)*100, 2)
 
     if 'test' in statid.lower():
         camname = statid
@@ -482,10 +486,8 @@ def sendLastBoot(statid=''):
     broker = localcfg['mqtt']['broker']
     mqport = int(localcfg['mqtt']['mqport'])
     auth = {'username': localcfg['mqtt']['username'], 'password': localcfg['mqtt']['password']}
-    if mqport == 8883:
-        tls = {'ca_certs':None, 'cert_reqs':ssl.CERT_REQUIRED, 'tls_version':ssl.PROTOCOL_TLS}
-    else:
-        tls = None
+    tls = getTlsConfig(localcfg)
+    
     clientid = clientId('lastboot')
     cfg, topicroot = getRMSConfig(statid, localcfg)
     if 'test' in statid.lower():
