@@ -1,4 +1,4 @@
-MIT NON-AI License
+# MIT NON-AI License
 
 Copyright (c) 2026, Mark McIntyre
 
